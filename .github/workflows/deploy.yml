@@ -36,6 +36,14 @@ jobs:
       - name: 🔑 ECR 로그인
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
+      
+      - name: 🧩 캐시 로드
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
 
       - name: 🏗️ Docker 이미지 빌드 & 푸시
         env:
@@ -46,6 +54,10 @@ jobs:
                      $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_LATEST }}
           docker push $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
           docker push $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_LATEST }}
+      
+      - name: 🧩 캐시 저장
+        if: always()
+        run: mv /tmp/.buildx-cache-new /tmp/.buildx-cache
 
   deploy_ec2:
     name: 🌐 EC2 서버에 Docker Compose 배포
@@ -61,26 +73,35 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
+          script_stop: true
           script: |
             set -e
+            echo "===== 🧩 EC2 디버그 모드 시작 ====="
+            echo "EC2 사용자: $(whoami)"
+            echo "Docker 버전:"
+            docker --version || echo "❌ Docker 미설치"
+            echo "AWS CLI 버전:"
+            aws --version || echo "❌ AWS CLI 미설치"
+            echo "AWS_ACCOUNT_ID=${{ secrets.AWS_ACCOUNT_ID }}"
+            echo "===== ✅ 사전 체크 완료 ====="
+
             echo "🔁 최신 Docker 이미지 Pull 중..."
             aws ecr get-login-password --region ${{ env.AWS_REGION }} \
-              | sudo docker login --username AWS --password-stdin \
+              | docker login --username AWS --password-stdin \
                 ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
-            cd /home/${{ secrets.EC2_USER }}/apps/hf-back
 
-            # ✅ .env 파일 자동 생성 (GitHub Secrets 값 주입)
-            cat <<EOF > .env
+            docker pull ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_LATEST }}
+
+            echo "✅ Pull 완료, Compose 실행 중..."
+            cd /home/${{ secrets.EC2_USERNAME }}/apps/hf-back
+
+            cat > .env <<'EOF'
             APP_NAME=FastAPI Application
             DEBUG=True
             HOST=0.0.0.0
             PORT=8000
-
-            # OpenAI API Key
             OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
             EOF
 
-            sudo docker compose pull
-            sudo docker compose up -d
-            sudo docker image prune -af
+            docker compose up -d
             echo "✅ 배포 완료!"
