@@ -55,7 +55,7 @@ jobs:
     steps:
       - name: 🧩 코드 불러오기
         uses: actions/checkout@v4
-
+        
       - name: 🔌 EC2 접속 & 배포 실행
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -67,9 +67,7 @@ jobs:
             set -e
             echo "===== 🧩 EC2 디버그 모드 시작 ====="
             echo "EC2 사용자: $(whoami)"
-            echo "Docker 버전:"
             docker --version || echo "❌ Docker 미설치"
-            echo "AWS CLI 버전:"
             aws --version || echo "❌ AWS CLI 미설치"
             echo "AWS_ACCOUNT_ID=${{ secrets.AWS_ACCOUNT_ID }}"
             echo "===== ✅ 사전 체크 완료 ====="
@@ -84,14 +82,14 @@ jobs:
             echo "✅ Pull 완료, Compose 실행 중..."
             cd /home/${{ secrets.EC2_USERNAME }}/apps/hf-back
             docker compose pull
-            
-            cat > .env <<EOF
-APP_NAME=FastAPI Application
-DEBUG=True
-HOST=0.0.0.0
-PORT=8000
-OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
-EOF
+
+            # .env 생성 (heredoc 대신 printf: 린터/들여쓰기 안전)
+            printf '%s\n' \
+              'APP_NAME=FastAPI Application' \
+              'DEBUG=True' \
+              'HOST=0.0.0.0' \
+              'PORT=8000' \
+              "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" > .env
 
             docker compose up -d
             echo "✅ 배포 완료!"
