@@ -38,34 +38,26 @@ async def create_session(
     """
     채팅 세션 생성 (멱등성 보장)
 
-    - **멱등성**: 같은 사용자가 같은 날짜에 여러 번 호출해도 동일한 session_id 반환
-    - **세션 ID**: user_id + 날짜(YYYY-MM-DD) 기반 결정적 생성
+    - **멱등성**: session_id = user_id (항상 동일한 세션)
     - **TTL**: 30분 자동 만료 (활동 시마다 연장)
 
     **동작:**
     1. JWT 토큰에서 user_id 추출
-    2. user_id + 현재 날짜로 세션 ID 생성
-    3. 이미 존재하면 기존 세션 반환, 없으면 새로 생성
-    4. Redis에 저장 및 TTL 설정
+    2. user_id를 session_id로 사용
+    3. Redis에 저장 및 TTL 설정
     """
     try:
-        # 기존 세션 확인
-        from datetime import datetime, timezone, timedelta
-        now = datetime.now(timezone.utc) + timedelta(hours=9)
-        date_str = now.strftime("%Y-%m-%d")
-
-        # 멱등성 보장: 같은 날짜면 같은 session_id
-        existing_session_id = session_manager.get_or_create_session(user_id, date_str)
-        session_info = session_manager.get_session_info(existing_session_id)
+        # 세션 생성 (user_id = session_id)
+        session_id = session_manager.create_session(user_id)
+        session_info = session_manager.get_session_info(session_id)
         is_new = session_info.get("message_count", "0") == "0"
 
         return SessionCreateResponse(
             success=True,
             message="세션이 생성되었습니다." if is_new else "기존 세션이 반환되었습니다.",
             data={
-                "session_id": existing_session_id,
+                "session_id": session_id,
                 "user_id": user_id,
-                "date": date_str,
                 "is_new": is_new,
                 "message_count": int(session_info.get("message_count", 0)),
                 "ttl_minutes": 30
