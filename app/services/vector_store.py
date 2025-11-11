@@ -1,14 +1,17 @@
 from langchain_postgres import PGVector
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
-from langchain_classic.chains import RetrievalQA
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import RunnablePassthrough
 from typing import Optional
 import os
 
 class VectorStoreService:
     """
-    RAG 기반 챗봇 서비스 (PostgreSQL + pgvector)
+    RAG 기반 PDF 매뉴얼 서비스 (PostgreSQL + pgvector)
     - PDF 문서를 PostgreSQL 벡터 DB에 저장
     - 사용자 질문에 대해 문서 기반 답변 제공
+    - 싱글톤 패턴으로 관리 (서버 전역 공유)
     """
 
     def __init__(self, openai_api_key: str, database_url: str, collection_name: str = "document_embeddings"):
@@ -29,7 +32,8 @@ class VectorStoreService:
         self.embeddings = OpenAIEmbeddings(model='text-embedding-3-small')
 
         self.vectorstore: Optional[PGVector] = None  # 벡터 DB
-        self.qa_chain: Optional[RetrievalQA] = None  # 질의응답 체인
+        self.qa_chain = None  # 질의응답 체인 (LCEL)
+        self.retriever = None  # 문서 검색기
 
     def create_vectorstore(self, documents, batch_size: int = 100):
         """
@@ -99,7 +103,7 @@ class VectorStoreService:
 
     def create_qa_chain(self, model_name: str = "gpt-4o-mini"):
         """
-        QA 체인 생성
+        QA 체인 생성 (LCEL - LangChain Expression Language)
         - LLM 모델 설정
         - 문서 검색 + 답변 생성 체인 구축
         """
@@ -112,46 +116,98 @@ class VectorStoreService:
             temperature=0  # 일관된 답변을 위해 0으로 설정
         )
 
-        # 친절한 한국어 프롬프트 추가
-        from langchain_core.prompts import PromptTemplate
-
+        # 친절한 한국어 프롬프트 (LCEL용)
         prompt_template = """너는 친절한 한국어 비서야.
-        아래 문서 내용을 참고해서 쉽고 자세하게 질문에 답해줘.
-        답변할 때는 존댓말을 사용하고, 핵심 내용을 먼저 말한 후 자세한 설명을 해줘.
+아래 문서 내용을 참고해서 쉽고 자세하게 질문에 답해줘.
+답변할 때는 존댓말을 사용하고, 핵심 내용을 먼저 말한 후 자세한 설명을 해줘.
 
-        문서 내용:
-        {context}
+문서 내용:
+{context}
 
-        질문: {question}
+질문: {question}
 
-        답변:"""
+답변:"""
 
-        PROMPT = PromptTemplate(
-            template=prompt_template,
-            input_variables=["context", "question"]
+        prompt = ChatPromptTemplate.from_template(prompt_template)
+
+        # Retriever 생성 (상위 3개 문서 검색)
+        self.retriever = self.vectorstore.as_retriever(search_kwargs={"k": 3})
+
+        # LCEL 체인 구성
+        def format_docs(docs):
+            """문서 리스트를 문자열로 변환"""
+            return "\n\n".join(doc.page_content for doc in docs)
+
+        # RAG 체인: 검색 → 포맷 → 프롬프트 → LLM → 파싱
+        self.qa_chain = (
+            {
+                "context": self.retriever | format_docs,
+                "question": RunnablePassthrough()
+            }
+            | prompt
+            | llm
+            | StrOutputParser()
         )
 
-        # QA 체인 생성 - 문서 검색 + LLM 답변 생성
-        self.qa_chain = RetrievalQA.from_chain_type(
-            llm=llm,
-            chain_type="stuff",  # 검색된 문서를 모두 프롬프트에 포함
-            retriever=self.vectorstore.as_retriever(search_kwargs={"k": 3}),  # 상위 3개 문서 검색
-            return_source_documents=True,  # 참조 문서도 함께 반환
-            chain_type_kwargs={"prompt": PROMPT}  # 커스텀 프롬프트 적용
-        )
         return self.qa_chain
 
     def query(self, question: str) -> dict:
         """
-        질문에 답변하기
+        질문에 답변하기 (LCEL)
         """
         if not self.qa_chain:
             raise ValueError("QA 체인이 없습니다. create_qa_chain을 먼저 호출하세요.")
 
-        # 질문 실행 - 자동으로 문서 검색 + 답변 생성
-        result = self.qa_chain.invoke({"query": question})
+        # LCEL 체인 실행 - 자동으로 문서 검색 + 답변 생성
+        answer = self.qa_chain.invoke(question)
+
+        # 소스 문서 별도 검색 (참조용)
+        source_docs = self.retriever.invoke(question)
 
         return {
-            "answer": result["result"],  # AI 답변
-            "sources": [doc.page_content for doc in result["source_documents"]]  # 참조 문서
+            "answer": answer,  # AI 답변
+            "sources": [doc.page_content for doc in source_docs]  # 참조 문서
         }
+
+
+# ============================================
+# 싱글톤 패턴
+# ============================================
+_vector_store_instance: Optional[VectorStoreService] = None
+
+def get_vector_store_service() -> VectorStoreService:
+    """
+    벡터 스토어 서비스 의존성 주입 (싱글톤)
+
+    - 서버 시작 시 한 번 초기화
+    - 전역 인스턴스 재사용
+    """
+    global _vector_store_instance
+
+    if _vector_store_instance is None:
+        from app.config import get_settings
+        settings = get_settings()
+
+        _vector_store_instance = VectorStoreService(
+            openai_api_key=settings.openai_api_key,
+            database_url=settings.database_url
+        )
+
+        # 기존 벡터 DB 자동 로드
+        if _vector_store_instance.load_vectorstore():
+            _vector_store_instance.create_qa_chain()
+            print("✅ PDF 매뉴얼 벡터 스토어 로드 완료")
+        else:
+            print("⚠️  벡터 스토어가 비어있습니다. /api/chatbot/initialize를 호출하여 PDF를 로드하세요.")
+
+    return _vector_store_instance
+
+def reset_vector_store_service():
+    """
+    벡터 스토어 서비스 리셋 (재초기화용)
+
+    - /api/chatbot/initialize에서 사용
+    - 테스트에서 사용
+    """
+    global _vector_store_instance
+    _vector_store_instance = None

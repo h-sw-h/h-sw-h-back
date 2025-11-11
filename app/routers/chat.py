@@ -11,23 +11,11 @@ from app.schemas.chat import (
 from app.services.chat_session import get_session_manager, ChatSessionManager
 from app.services.diary_service import get_diary_service, DiaryService
 from app.services.chat_orchestrator import get_chat_orchestrator, ChatOrchestrator
-from app.services.vector_store import VectorStoreService
+from app.services.vector_store import VectorStoreService, get_vector_store_service
 from app.routers.auth import get_current_user_id
 import traceback
 
 router = APIRouter(prefix="/api/chat", tags=["Chat"])
-
-
-# chatbot 라우터에서 초기화된 vector_store를 가져오는 의존성
-def get_vector_store_from_chatbot():
-    """chatbot 라우터의 전역 vector_store_service 가져오기"""
-    from app.routers import chatbot
-    if chatbot.vector_store_service is None:
-        raise HTTPException(
-            status_code=503,
-            detail="챗봇이 초기화되지 않았습니다. /api/chatbot/initialize를 먼저 호출해주세요."
-        )
-    return chatbot.vector_store_service
 
 
 @router.post("/session/create", response_model=SessionCreateResponse, summary="채팅 세션 시작")
@@ -73,7 +61,7 @@ async def create_session(
 async def send_message(
     request: ChatMessageRequest,
     user_id: str = Depends(get_current_user_id),
-    vector_store: VectorStoreService = Depends(get_vector_store_from_chatbot)
+    vector_store: VectorStoreService = Depends(get_vector_store_service)
 ):
     """
     채팅 메시지 전송
@@ -128,7 +116,7 @@ async def send_message(
 async def end_session(
     request: SessionEndRequest,
     user_id: str = Depends(get_current_user_id),
-    vector_store: VectorStoreService = Depends(get_vector_store_from_chatbot),
+    vector_store: VectorStoreService = Depends(get_vector_store_service),
     diary_service: DiaryService = Depends(get_diary_service)
 ):
     """

@@ -12,7 +12,17 @@ async def lifespan(app: FastAPI):
     # 시작 시: 데이터베이스 테이블 생성
     print("🔧 데이터베이스 테이블 초기화 중...")
     Base.metadata.create_all(bind=engine)
-    print("✅ 데이터베이스 테이블 준비 완료!")
+    print("✅ 데이터베이스 테이블 준비 완료!\n\n")
+
+    # 시작 시: PDF 매뉴얼 벡터 스토어 자동 로드
+    print("📚 PDF 매뉴얼 벡터 스토어 로딩 중...")
+    from app.services.vector_store import get_vector_store_service
+    try:
+        get_vector_store_service()  # 싱글톤 초기화 트리거
+        print("✅ PDF 매뉴얼 벡터 스토어 준비 완료!")
+    except Exception as e:
+        print(f"⚠️  PDF 매뉴얼 로드 실패: {e}")
+        print("   /api/chatbot/initialize를 호출하여 수동으로 초기화하세요.")
 
     yield
 
