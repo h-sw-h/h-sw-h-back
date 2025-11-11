@@ -86,6 +86,7 @@ jobs:
               'HOST=0.0.0.0' \
               'PORT=8000' \
               "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" \
+              "DATABASE_URL=${{ secrets.DATABASE_URL }}" \
               > .env
 
             echo "🚀 새 컨테이너 실행"

@@ -15,6 +15,11 @@ ENV/
 # Vector Database
 chroma_db/
 
+# SQLite Database
+*.sqlite
+*.sqlite3
+*.db
+
 # IDEs
 .vscode/
 .idea/
