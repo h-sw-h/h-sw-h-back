@@ -1,0 +1,16 @@
+{
+  "user@example.com": {
+    "user_id": "d911f797-e790-45b5-9d69-a4410c355edc",
+    "email": "user@example.com",
+    "password": "$2b$12$3J7IM02V7YksApxioYiBsef8J3YLoAlhP7kCfslyQUrUQtF8Jeha2",
+    "nickname": "string",
+    "created_at": "2025-11-11T10:36:40.524773"
+  },
+  "test@example.com": {
+    "user_id": "3394af64-7031-4e72-bfde-3170d8908d02",
+    "email": "test@example.com",
+    "password": "$2b$12$H6fMGKY7gHzP5g3Y5Wxlu.vrO3cveFJvdlRaVkr7KK9/e6wWlnxgq",
+    "nickname": "테스트유저",
+    "created_at": "2025-11-11T10:41:06.802523"
+  }
+}
