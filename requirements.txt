@@ -14,9 +14,9 @@ langchain-community==0.4.1
 langchain-core==1.0.3
 openai>=1.109.1,<3.0.0
 
-# Vector Store
-chromadb==0.6.3
-sentence-transformers==3.0.0
+# Vector Store - PostgreSQL with pgvector
+pgvector==0.3.6
+langchain-postgres==0.0.16
 
 # Authentication
 python-jose[cryptography]==3.3.0
