@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import health, chatbot
+from app.routers import auth
 
 app = FastAPI(
     title="은둔/고립 청년 사회복귀 지원 챗봇 API",
@@ -20,6 +21,7 @@ app.add_middleware(
 # 라우터 등록
 app.include_router(health.router, prefix="/api", tags=["health"])
 app.include_router(chatbot.router, prefix="/api/chatbot", tags=["chatbot"])
+app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 
 @app.get("/")
 async def root():

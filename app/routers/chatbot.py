@@ -6,6 +6,7 @@ from app.utils.pdf_loader import PDFProcessor
 from app.config import get_settings
 import os
 import traceback
+from app.routers.auth import get_current_user_id
 
 router = APIRouter()
 
@@ -105,6 +106,7 @@ async def initialize_chatbot():
 @router.post("/chat", response_model=ChatResponse, summary="챗봇 대화")
 async def chat(
     request: QuestionRequest,
+    user_id: str = Depends(get_current_user_id) ,
     vector_store: VectorStoreService = Depends(get_vector_store)
 ):
     """
@@ -112,6 +114,7 @@ async def chat(
     - 사용자 질문에 대해 문서 기반 답변 제공
     """
     try:
+        # todo: user_id 활용한 맞춤형 응답 기능 추가 예정
         result = vector_store.query(request.question)
 
         return ChatResponse(
@@ -120,7 +123,8 @@ async def chat(
             data={
                 "question": request.question,
                 "answer": result["answer"],
-                "sources": result.get("sources")
+                "sources": result.get("sources"),
+                "user_id": user_id
             }
         )
 
