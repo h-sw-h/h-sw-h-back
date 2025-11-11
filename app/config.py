@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     port: int = 8000
     openai_api_key: Optional[str] = None
     database_url: str  # 필수 환경변수
+    redis_url: str = "redis://localhost:6379/0"  # Redis 연결 URL
 
     class Config:
         env_file = ".env"
