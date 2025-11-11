@@ -16,7 +16,7 @@ from langchain_core.output_parsers import JsonOutputParser, StrOutputParser
 # --- 1. API 키 및 모델 설정 ---
 llm_mini = ChatOpenAI(
     model="gpt-4o-mini",
-    api_key=os.getenv("OPENAI_API_KEY") # <--- "OPENAI_API_KEY" 이름이 맞습니다.
+    api_key=os.getenv("OPENAI_API_KEY") 
 )
 
 # --- [추가] Redis 서버 연결 ---
