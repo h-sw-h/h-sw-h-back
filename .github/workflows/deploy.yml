@@ -94,6 +94,7 @@ jobs:
             echo "🚀 새 컨테이너 실행"
             docker run -d \
               --name ${{ env.IMAGE_NAME }} \
+              --network $NETWORK \
               --env-file .env \
               -p 8000:8000 \
               $IMAGE
