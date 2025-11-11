@@ -2,8 +2,10 @@
 from datetime import datetime, timedelta, timezone
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-import json
-import os
+from sqlalchemy.orm import Session
+from app.models.db_models import User
+from app.repositories.user_repository import UserRepository
+import uuid
 
 # 설정
 SECRET_KEY = "your-secret-key-change-in-production"  # 환경변수로 관리
@@ -13,24 +15,9 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30 * 24 * 60  # 30일
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 class AuthService:
-    def __init__(self):
-        self.users_file = "data/users.json"
-        os.makedirs("data", exist_ok=True)
-        if not os.path.exists(self.users_file):
-            self._save_users({})
-    
-    def _load_users(self) -> dict:
-        """사용자 데이터 로드"""
-        try:
-            with open(self.users_file, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except:
-            return {}
-    
-    def _save_users(self, users: dict):
-        """사용자 데이터 저장"""
-        with open(self.users_file, 'w', encoding='utf-8') as f:
-            json.dump(users, f, ensure_ascii=False, indent=2)
+    def __init__(self, db: Session = None):
+        self.db = db
+        self.user_repository = UserRepository(db)
     
     def hash_password(self, password: str) -> str:
         """비밀번호 해싱 (bcrypt 72바이트 제한 대응)"""
@@ -62,45 +49,44 @@ class AuthService:
     
     def register(self, email: str, password: str, nickname: str) -> dict:
         """회원가입"""
-        users = self._load_users()
-        
         # 이메일 중복 체크
-        if email in users:
+        if self.user_repository.exists_by_email(email):
             raise ValueError("이미 존재하는 이메일입니다")
-        
+
         # 사용자 생성
-        import uuid
-        user_id = str(uuid.uuid4())
-        users[email] = {
-            "user_id": user_id,
-            "email": email,
-            "password": self.hash_password(password),
-            "nickname": nickname,
-            "created_at": datetime.now(timezone.utc).isoformat()
+        new_user = User(
+            user_id=uuid.uuid4(),
+            email=email,
+            password=self.hash_password(password),
+            nickname=nickname,
+            created_at=datetime.now(timezone.utc)
+        )
+
+        created_user = self.user_repository.create(new_user)
+
+        return {
+            "user_id": str(created_user.user_id),
+            "email": created_user.email,
+            "nickname": created_user.nickname
         }
-        
-        self._save_users(users)
-        return {"user_id": user_id, "email": email, "nickname": nickname}
     
     def login(self, email: str, password: str) -> str:
         """로그인"""
-        users = self._load_users()
-        
-        # 사용자 존재 확인
-        if email not in users:
+        # 사용자 조회
+        user = self.user_repository.find_by_email(email)
+
+        if not user:
             raise ValueError("이메일 또는 비밀번호가 올바르지 않습니다")
-        
-        user = users[email]
-        
+
         # 비밀번호 검증
-        if not self.verify_password(password, user["password"]):
+        if not self.verify_password(password, user.password):
             raise ValueError("이메일 또는 비밀번호가 올바르지 않습니다")
-        
+
         # 토큰 생성
         access_token = self.create_access_token(
-            data={"user_id": user["user_id"], "email": email}
+            data={"user_id": str(user.user_id), "email": user.email}
         )
-        
+
         return access_token
     
     def get_current_user(self, token: str) -> dict:
@@ -108,16 +94,15 @@ class AuthService:
         payload = self.verify_token(token)
         if not payload:
             raise ValueError("유효하지 않은 토큰입니다")
-        
-        users = self._load_users()
+
         email = payload.get("email")
-        
-        if email not in users:
+        user = self.user_repository.find_by_email(email)
+
+        if not user:
             raise ValueError("사용자를 찾을 수 없습니다")
-        
-        user = users[email]
+
         return {
-            "user_id": user["user_id"],
-            "email": user["email"],
-            "nickname": user["nickname"]
+            "user_id": str(user.user_id),
+            "email": user.email,
+            "nickname": user.nickname
         }
