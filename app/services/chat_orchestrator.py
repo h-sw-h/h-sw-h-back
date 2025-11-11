@@ -1,7 +1,10 @@
 # services/chat_orchestrator.py
 from typing import List, Dict, Optional
+import json
+import re
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from app.services.chat_session import ChatSessionManager
 from app.services.diary_service import DiaryService
@@ -38,6 +41,12 @@ class ChatOrchestrator:
             model="gpt-4o-mini",
             temperature=0.7  # 공감적인 응답을 위해 조금 높게
         )
+        # --- [주석] main_with_redis.py의 gpt-4o-mini 모델 설정을 가져옴 ---
+        self.llm_mini = ChatOpenAI(
+            model="gpt-4o-mini",
+            api_key=settings.openai_api_key
+        )
+        # --- [주석] ---
 
         # 토큰 카운터 (gpt-4o-mini는 cl100k_base 인코딩 사용)
         self.tokenizer = tiktoken.get_encoding("cl100k_base")
@@ -64,6 +73,51 @@ class ChatOrchestrator:
 - 따뜻하고 진솔한 톤
 
 과거 대화 내역이나 유사한 일기가 있다면 참고하되, 현재 대화에 집중하세요."""
+
+        # --- [주석] main_with_redis.py의 프롬프트 및 체인 설정 ---
+        # 1. 프롬프트 템플릿 정의
+        cbt_extract_prompt_template = """
+        당신은 CBT(인지행동치료) 전문가입니다.
+        [대화 전사]를 읽고, [상황, 생각, 감정, 행동] 4가지 요소를 JSON으로 추출하세요.
+        [규칙]...
+        [대화 전사]
+        {transcript}
+        [출력 형식 (JSON)]
+        {{
+          "situation": "...",
+          "thoughts": [...],
+          "emotions": [...],
+          "behaviors": [...]
+        }}
+        """
+        self.cbt_extract_prompt = ChatPromptTemplate.from_template(cbt_extract_prompt_template)
+
+        alt_perspective_prompt_template = """
+        당신은 친절한 CBT 코치입니다.
+        [자동적 사고]를 완화할 '다른 관점'을 1~2문장의 조언으로 작성해 주세요.
+        [자동적 사고]
+        {thoughts_text}
+        [생성할 '다른 관점']
+        """
+        self.alt_perspective_prompt = ChatPromptTemplate.from_template(alt_perspective_prompt_template)
+
+        diary_generation_prompt_template = """
+        당신은 '일기 작성가'입니다.
+        주어진 [CBT 분석 데이터 (S-T-E-B)]를 바탕으로, 1인칭 '간단한 하루 일기'를 작성해 주세요.
+        조언은 포함하지 말고, 오직 사용자의 경험(S-T-E-B)만 서술하세요.
+        [CBT 분석 데이터]
+        {cbt_json_data}
+        [작성할 일기]
+        """
+        self.diary_generation_prompt = ChatPromptTemplate.from_template(diary_generation_prompt_template)
+
+        # 2. 파서 및 LangChain 체인 구성
+        string_parser = StrOutputParser()
+
+        self.chain_extract_cbt = self.cbt_extract_prompt | self.llm_mini | string_parser
+        self.chain_gen_perspective = self.alt_perspective_prompt | self.llm_mini | string_parser
+        self.chain_create_diary = self.diary_generation_prompt | self.llm_mini | string_parser
+        # --- [주석] ---
 
     # ------------------------
     # 외부에서 호출하는 메인 엔드포인트
@@ -196,7 +250,7 @@ class ChatOrchestrator:
 
             print(f"[SummaryBuffer] 요약 완료 및 Redis 캐시 저장")
         else:
-            summary_text = cached_summary
+            summary_text = cached_summary.decode('utf-8') if isinstance(cached_summary, bytes) else cached_summary
             print(f"[SummaryBuffer] Redis 캐시에서 요약 로드 (메시지 {len(old_messages)}개)")
 
         # 5. 요약 메시지 + 최근 원본 메시지 반환
@@ -306,47 +360,99 @@ class ChatOrchestrator:
         response = self.llm.invoke(messages)
         return response.content
 
-    def summarize_conversation_to_diary(self, session_id: str) -> str:
+    # --- [주석] main_with_redis.py 로직을 적용하여 수정한 일기 생성 메서드 ---
+    def _extract_json_from_markdown(self, text: str) -> Optional[str]:
         """
-        대화 요약 → 일기 생성 (CBT 구조화)
+        AI가 반환한 마크다운(```json ... ```) 텍스트에서
+        순수한 JSON 문자열({ ... })만 추출합니다.
+        """
+        match = re.search(r'\{.*\}', text, re.DOTALL)
+        if match:
+            return match.group(0)
+        else:
+            if text.strip().startswith("{"):
+                return text
+        return None
+
+    def summarize_conversation_to_diary(self, session_id: str) -> Dict[str, str]:
+        """
+        대화 요약 → CBT 4요소 추출 → 일기 및 다른 관점 생성
 
         Returns:
-            요약된 일기 본문
+            생성된 일기 및 다른 관점을 포함한 딕셔너리
         """
-        # 전체 대화 가져오기
+        # 1. 전체 대화 내용 가져오기
         full_conversation = self.session_manager.get_full_conversation(session_id)
-
         if not full_conversation:
-            return ""
+            return {
+                "diary_text": "일기를 생성할 대화 내용이 없습니다.",
+                "alternative_perspective": ""
+            }
 
-        # 대화 텍스트 구성
-        conversation_text = ""
-        for msg in full_conversation:
-            role = "나" if msg["role"] == "user" else "상담사"
-            conversation_text += f"{role}: {msg['content']}\n"
+        # 대화 내용을 하나의 문자열로 변환
+        transcript = "\n".join([f"{'사용자' if msg['role'] == 'user' else '상담사'}: {msg['content']}" for msg in full_conversation])
 
-        # CBT 요약 프롬프트
-        summary_prompt = f"""다음은 사용자와 상담사의 대화입니다. 이를 CBT(인지행동치료) 구조에 맞춰 일기 형식으로 요약해주세요.
+        try:
+            # 2. LLM을 통해 대화 내용에서 CBT 4요소(S-T-E-B) 추출
+            cbt_data_str = self.chain_extract_cbt.invoke({
+                "transcript": transcript
+            })
 
-**대화 내용:**
-{conversation_text}
+            # 3. AI가 생성한 응답에서 순수 JSON 부분만 추출
+            pure_json_str = self._extract_json_from_markdown(cbt_data_str)
+            if not pure_json_str:
+                error_message = f"오류: AI 응답에서 CBT 데이터를 추출하지 못했습니다. (응답: {cbt_data_str})"
+                print(error_message)
+                return {
+                    "diary_text": "일기 생성 중 오류가 발생했습니다. 대화 내용을 분석하는 데 실패했습니다.",
+                    "alternative_perspective": error_message
+                }
 
-**요약 형식:**
-1. **오늘의 상황**: 어떤 일이 있었는지 간단히
-2. **내 감정**: 어떤 감정을 느꼈는지
-3. **내 생각**: 어떤 생각이 들었는지
-4. **새로운 관점**: 상담을 통해 발견한 것
-5. **다음 행동**: 시도해볼 수 있는 작은 행동
+            # 4. 추출된 JSON 문자열을 파이썬 딕셔너리로 변환
+            try:
+                cbt_data = json.loads(pure_json_str)
+            except json.JSONDecodeError:
+                error_message = f"오류: AI가 생성한 CBT 데이터의 형식이 잘못되었습니다. (내용: {pure_json_str})"
+                print(error_message)
+                return {
+                    "diary_text": "일기 생성 중 오류가 발생했습니다. 분석된 데이터 형식이 올바르지 않습니다.",
+                    "alternative_perspective": error_message
+                }
 
-간결하고 진솔하게, 사용자의 시각에서 1인칭으로 작성하세요."""
+            # 5. 추출된 '자동적 사고' 목록을 바탕으로 '다른 관점' 생성
+            thoughts_list = cbt_data.get('thoughts', [])
+            thought_texts = []
+            for t in thoughts_list:
+                if isinstance(t, dict):
+                    thought_texts.append(t.get('text', ''))
+                elif isinstance(t, str):
+                    thought_texts.append(t)
+            
+            final_alternative_perspective = ""
+            if thought_texts:
+                final_alternative_perspective = self.chain_gen_perspective.invoke({
+                    "thoughts_text": "\n- ".join(thought_texts)
+                })
 
-        messages = [
-            SystemMessage(content="당신은 CBT 기반 일기 작성을 돕는 전문가입니다."),
-            HumanMessage(content=summary_prompt)
-        ]
+            # 6. 추출된 CBT 데이터를 바탕으로 1인칭 시점의 일기 생성
+            final_diary_text = self.chain_create_diary.invoke({
+                "cbt_json_data": json.dumps(cbt_data, ensure_ascii=False)
+            })
 
-        summary = self.llm.invoke(messages)
-        return summary.content
+            # 7. 최종 결과 반환
+            return {
+                "diary_text": final_diary_text,
+                "alternative_perspective": final_alternative_perspective
+            }
+
+        except Exception as e:
+            error_message = f"일기 생성 중 예기치 않은 오류 발생: {str(e)}"
+            print(error_message)
+            return {
+                "diary_text": "일기 생성 중 알 수 없는 오류가 발생했습니다.",
+                "alternative_perspective": error_message
+            }
+    # --- [주석] ---
 
 
 # 전역 오케스트레이터 인스턴스
