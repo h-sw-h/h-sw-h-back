@@ -39,8 +39,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="은둔/고립 청년 사회복귀 지원 챗봇 API",
-    description="은둔/고립 청년의 원활한 사회복귀를 돕는 RAG 기반 챗봇 API",
+    title="우울감 회복지원 지원 챗봇 API",
+    description="우울감을 갖는 분들을 위한 지원 챗봇 API",
     version="1.0.0",
     lifespan=lifespan
 )
@@ -64,7 +64,7 @@ app.include_router(admin.router)  # prefix와 tags는 router에 이미 포함
 @app.get("/")
 async def root():
     return {
-        "message": "은둔/고립 청년 사회복귀 지원 챗봇 API",
+        "message": "우울감 회복지원 지원 챗봇 API",
         "version": "1.0.0",
         "docs": "/docs"
     }

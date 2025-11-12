@@ -58,8 +58,8 @@ class ChatData(BaseModel):
     class Config:
         json_schema_extra = {
             "example": {
-                "question": "사회복귀를 위한 지원 프로그램에는 어떤 것들이 있나요?",
-                "answer": "은둔/고립 청년을 위한 사회복귀 지원 프로그램은...",
+                "question": "우울감을 회복하기위한 지원 프로그램에는 어떤 것들이 있나요?",
+                "answer": "우울감을 갖는 분들을 위한 지원 프로그램은...",
                 "sources": ["지원 프로그램 안내...", "상담 서비스 정보..."]
             }
         }

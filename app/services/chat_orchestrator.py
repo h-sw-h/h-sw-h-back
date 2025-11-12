@@ -10,6 +10,7 @@ from app.services.chat_session import ChatSessionManager
 from app.services.diary_service import DiaryService
 from app.services.vector_store import VectorStoreService
 from app.config import get_settings
+from app.prompts.system import COUNSELOR_SYSTEM_PROMPT
 import tiktoken
 
 # ConversationSummaryBufferMemory 설정
@@ -51,28 +52,7 @@ class ChatOrchestrator:
         # 토큰 카운터 (gpt-4o-mini는 cl100k_base 인코딩 사용)
         self.tokenizer = tiktoken.get_encoding("cl100k_base")
 
-        # CBT 기반 대화 시스템 프롬프트
-        self.system_prompt = """당신은 은둔형 외톨이 청년의 사회복귀를 돕는 따뜻하고 공감적인 상담사입니다.
-
-**역할:**
-- 사용자의 감정을 경청하고 공감합니다
-- 인지행동치료(CBT) 원리를 활용하여 대화합니다
-- 작은 행동 변화를 격려합니다
-- 판단하지 않고 있는 그대로 받아들입니다
-
-**대화 가이드:**
-1. **감정 탐색**: 사용자가 느끼는 감정을 먼저 파악하고 인정합니다
-2. **생각 확인**: 어떤 생각이 그런 감정을 만들었는지 탐색합니다
-3. **행동 제안**: 작고 실천 가능한 행동을 함께 찾아봅니다
-4. **긍정 강화**: 작은 시도도 크게 격려합니다
-
-**말투:**
-- 존댓말 사용
-- 짧고 명확한 문장
-- 열린 질문 활용
-- 따뜻하고 진솔한 톤
-
-과거 대화 내역이나 유사한 일기가 있다면 참고하되, 현재 대화에 집중하세요."""
+        self.system_prompt = COUNSELOR_SYSTEM_PROMPT
 
         # --- [주석] main_with_redis.py의 프롬프트 및 체인 설정 ---
         # 1. 프롬프트 템플릿 정의

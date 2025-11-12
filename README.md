@@ -1,6 +1,6 @@
-# 은둔/고립 청년 사회복귀 지원 챗봇 API
+# 우울감을 갖는 분들을 위한 회복 지원 챗봇 API
 
-은둔/고립 청년의 원활한 사회복귀를 돕는 RAG 기반 챗봇 API
+우울감을 갖는 분들을 위한 회복 지원 RAG 기반 챗봇 API
 
 ## 설치 방법
 
@@ -90,14 +90,14 @@ curl http://localhost:8000/api/chatbot/status
 ```bash
 curl -X POST http://localhost:8000/api/chatbot/chat \
   -H "Content-Type: application/json" \
-  -d '{"question": "사회복귀를 위한 지원 프로그램에는 어떤 것들이 있나요?"}'
+  -d '{"question": "우울감을 해소하기 위한 프로그램에는 어떤 것들이 있나요?"}'
 ```
 
 예쁘게 출력 (jq 사용):
 ```bash
 curl -X POST http://localhost:8000/api/chatbot/chat \
   -H "Content-Type: application/json" \
-  -d '{"question": "사회복귀를 위한 지원 프로그램에는 어떤 것들이 있나요?"}' | jq
+  -d '{"question": "우울감을 해소하기 위한 지원 프로그램에는 어떤 것들이 있나요?"}' | jq
 ```
 
 응답 예시:
@@ -106,8 +106,8 @@ curl -X POST http://localhost:8000/api/chatbot/chat \
   "success": true,
   "message": "답변이 생성되었습니다.",
   "data": {
-    "question": "사회복귀를 위한 지원 프로그램에는 어떤 것들이 있나요?",
-    "answer": "은둔/고립 청년을 위한 사회복귀 지원 프로그램은...",
+    "question": "우울감을 해소하기 위한 지원 프로그램에는 어떤 것들이 있나요?",
+    "answer": "우울감을 해소하기 위한 사회복귀 지원 프로그램은...",
     "sources": ["지원 프로그램 안내...", "상담 서비스 정보..."]
   }
 }
