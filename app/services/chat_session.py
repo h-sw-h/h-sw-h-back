@@ -51,7 +51,7 @@ class ChatSessionManager:
 
         # 메시지 리스트 초기화 (List)
         messages_key = f"messages:{session_id}"
-        self.redis.delete(messages_key)  # 혹시 모를 기존 데이터 삭제
+        # self.redis.delete(messages_key)  # 혹시 모를 기존 데이터 삭제
 
         return session_id
 
