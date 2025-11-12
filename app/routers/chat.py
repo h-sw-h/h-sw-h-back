@@ -152,11 +152,8 @@ async def end_session(
         diary_id = diary_service.save_diary(
             user_id=user_id,
             diary_content=diary_result["diary_text"],
-            metadata={
-                "session_id": request.session_id,
-                "message_count": session_info.get("message_count", 0),
-                "alternative_perspective": diary_result.get("alternative_perspective", "")
-            }
+            alternative_perspective=diary_result.get("alternative_perspective", ""),
+            message_count=session_info.get("message_count", 0)
         )
 
         # 세션 삭제

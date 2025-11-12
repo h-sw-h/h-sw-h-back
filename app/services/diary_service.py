@@ -31,7 +31,8 @@ class DiaryService:
         self,
         user_id: str,
         diary_content: str,
-        metadata: Optional[Dict] = None
+        alternative_perspective: str,
+        message_count: int
     ) -> str:
         """
         일기 저장
@@ -39,21 +40,28 @@ class DiaryService:
         Args:
             user_id: 사용자 ID
             diary_content: 일기 본문
-            metadata: 메타데이터 (선택) - 날짜, 감정, CBT 요소 등
 
         Returns:
             diary_id: 저장된 일기 ID
         """
         diary_id = str(uuid.uuid4())
+        now = datetime.now()
 
-        # 메타데이터 구성
-        doc_metadata = metadata or {}
-        doc_metadata.update({
+        # 날짜 계산: 06:00 이전이면 전날로 기록
+        if now.hour < 6:
+            diary_date = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+        else:
+            diary_date = now.strftime("%Y-%m-%d")
+
+        # 메타데이터 구성 (필수 필드만)
+        doc_metadata = {
             "user_id": user_id,
             "diary_id": diary_id,
-            "created_at": datetime.now().isoformat(),
-            "type": "diary"  # 구분자
-        })
+            "diary_date": diary_date,  # 일기 날짜 (06:00 기준)
+            "created_at": now.isoformat(),  # 실제 생성 시각
+            "alternative_perspective": alternative_perspective,
+            "message_count": message_count
+        }
 
         # Document 객체 생성
         document = Document(

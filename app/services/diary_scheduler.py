@@ -106,14 +106,8 @@ class DiaryScheduler:
                     diary_id = self.diary_service.save_diary(
                         user_id=user_id,
                         diary_content=diary_result["diary_text"],  # 문자열 추출
-                        metadata={
-                            "session_id": session_id,
-                            "message_count": message_count,
-                            "auto_created": True,
-                            "created_date": session_info.get("created_at"),
-                            "source": "auto_scheduler",
-                            "alternative_perspective": diary_result.get("alternative_perspective", "")
-                        }
+                        alternative_perspective=diary_result.get("alternative_perspective", ""),
+                        message_count=session_info.get("message_count", 0)
                     )
 
                     print(f"   ✅ 일기 저장 완료 (diary_id: {diary_id[:8]}...)")
