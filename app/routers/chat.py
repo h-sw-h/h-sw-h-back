@@ -6,7 +6,10 @@ from app.schemas.chat import (
     ChatMessageRequest,
     ChatMessageResponse,
     SessionEndRequest,
-    SessionEndResponse
+    SessionEndResponse,
+    ChatHistoryResponse,
+    ChatHistoryData,
+    ChatHistoryMessage
 )
 from app.services.chat_session import get_session_manager, ChatSessionManager
 from app.services.diary_service import get_diary_service, DiaryService
@@ -176,3 +179,57 @@ async def end_session(
     except Exception as e:
         print(f"세션 종료 실패: {e}\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"세션 종료 실패: {str(e)}")
+
+
+@router.get("/session/{session_id}/history", response_model=ChatHistoryResponse, summary="세션 채팅 내역 조회")
+async def get_chat_history(
+    session_id: str,
+    user_id: str = Depends(get_current_user_id),
+    session_manager: ChatSessionManager = Depends(get_session_manager)
+):
+    """
+    특정 세션의 모든 채팅 내역 조회
+
+    **응답:**
+    - session_id: 세션 ID
+    - user_id: 사용자 ID
+    - messages: 메시지 리스트 (role, content, timestamp)
+    - message_count: 총 메시지 개수
+    """
+    try:
+        # 세션 검증
+        session_info = session_manager.get_session_info(session_id)
+
+        if not session_info:
+            raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다.")
+
+        if session_info.get("user_id") != user_id:
+            raise HTTPException(status_code=403, detail="세션 접근 권한이 없습니다.")
+
+        # 전체 대화 내역 가져오기
+        full_conversation = session_manager.get_full_conversation(session_id)
+
+        # ChatHistoryMessage 객체로 변환
+        messages = [
+            ChatHistoryMessage(
+                role=msg["role"],
+                content=msg["content"],
+                timestamp=msg.get("timestamp")
+            )
+            for msg in full_conversation
+        ]
+
+        return ChatHistoryResponse(
+            success=True,
+            data=ChatHistoryData(
+                session_id=session_id,
+                messages=messages,
+                message_count=len(messages)
+            )
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"채팅 내역 조회 실패: {e}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"채팅 내역 조회 실패: {str(e)}")

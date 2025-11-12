@@ -56,3 +56,20 @@ class DiaryByDateResponse(BaseModel):
     success: bool = Field(..., description="성공 여부")
     message: str = Field(..., description="응답 메시지")
     data: Optional[DiaryEntry] = Field(None, description="일기 데이터 (없으면 None)")
+
+class ChatHistoryMessage(BaseModel):
+    """채팅 메시지"""
+    role: str = Field(..., description="메시지 역할 (user 또는 assistant)")
+    content: str = Field(..., description="메시지 내용")
+    timestamp: Optional[str] = Field(None, description="메시지 타임스탬프")
+
+class ChatHistoryData(BaseModel):
+    """채팅 내역 데이터"""
+    session_id: str = Field(..., description="세션 ID")
+    messages: List[ChatHistoryMessage] = Field(..., description="메시지 리스트")
+    message_count: int = Field(..., description="총 메시지 개수")
+
+class ChatHistoryResponse(BaseModel):
+    """채팅 내역 조회 응답"""
+    success: bool = Field(..., description="성공 여부")
+    data: ChatHistoryData = Field(..., description="채팅 내역 데이터")
