@@ -28,3 +28,13 @@ chroma_db/
 
 # OS
 .DS_Store
+
+# ML Models (큰 파일 제외)
+ml_models/**/*.safetensors
+ml_models/**/*.bin
+ml_models/**/*.pt
+ml_models/**/*.pth
+ml_models/**/*.onnx
+ml_models/**/*.h5
+ml_models/**/*.pkl
+ml_models/**/*.joblib

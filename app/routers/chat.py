@@ -9,12 +9,16 @@ from app.schemas.chat import (
     SessionEndResponse,
     ChatHistoryResponse,
     ChatHistoryData,
-    ChatHistoryMessage
+    ChatHistoryMessage,
+    EmotionAnalysisResponse,
+    EmotionAnalysisData,
+    EmotionItem
 )
 from app.services.chat_session import get_session_manager, ChatSessionManager
 from app.services.diary_service import get_diary_service, DiaryService
 from app.services.chat_orchestrator import get_chat_orchestrator, ChatOrchestrator
 from app.services.vector_store import VectorStoreService, get_vector_store_service
+from app.services.emotion_service import get_emotion_service, EmotionService
 from app.routers.auth import get_current_user_id
 import traceback
 
@@ -233,3 +237,90 @@ async def get_chat_history(
     except Exception as e:
         print(f"채팅 내역 조회 실패: {e}\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"채팅 내역 조회 실패: {str(e)}")
+
+
+@router.get("/session/{session_id}/emotions", response_model=EmotionAnalysisResponse, summary="감정 분석")
+async def analyze_emotions(
+    session_id: str,
+    user_id: str = Depends(get_current_user_id),
+    session_manager: ChatSessionManager = Depends(get_session_manager),
+    emotion_service: EmotionService = Depends(get_emotion_service)
+):
+    """
+    세션의 사용자 대화 텍스트를 분석하여 상위 5개 감정 반환
+
+    **플로우:**
+    1. 세션 검증
+    2. 전체 대화 내역 가져오기
+    3. 사용자 메시지만 필터링하여 한 줄 텍스트로 합치기
+    4. kote-bert-ml 모델에 입력하여 감정 분석
+    5. 상위 5개 감정 반환 (모든 감정 포함)
+
+    **응답:**
+    - session_id: 세션 ID
+    - combined_text: 합쳐진 대화 텍스트
+    - emotions: 상위 5개 감정 리스트 (점수 내림차순)
+      - emotion: 감정 이름 (KOTE 43 레이블)
+      - score: 감정 점수 (0.0 ~ 1.0)
+      - threshold: 감정 활성화 임계값
+      - is_active: 임계값을 넘었는지 여부
+    - message_count: 분석에 사용된 사용자 메시지 개수
+    """
+    try:
+        # 세션 검증
+        session_info = session_manager.get_session_info(session_id)
+
+        if not session_info:
+            raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다.")
+
+        if session_info.get("user_id") != user_id:
+            raise HTTPException(status_code=403, detail="세션 접근 권한이 없습니다.")
+
+        # 전체 대화 내역 가져오기
+        full_conversation = session_manager.get_full_conversation(session_id)
+
+        if not full_conversation:
+            raise HTTPException(status_code=400, detail="분석할 대화 내용이 없습니다.")
+
+        # 사용자 메시지만 필터링하여 한 줄 텍스트로 합치기
+        combined_text = emotion_service.combine_conversation_text(full_conversation)
+
+        if not combined_text or not combined_text.strip():
+            raise HTTPException(status_code=400, detail="사용자 메시지가 없습니다.")
+
+        # 감정 분석 (상위 5개)
+        emotion_results = emotion_service.analyze_emotions(combined_text, top_k=5)
+
+        if not emotion_results:
+            raise HTTPException(status_code=500, detail="감정 분석 모델이 로드되지 않았습니다.")
+
+        # 사용자 메시지 개수 계산
+        user_message_count = sum(1 for msg in full_conversation if msg.get("role") == "user")
+
+        # EmotionItem 객체로 변환
+        emotions = [
+            EmotionItem(
+                emotion=item["emotion"],
+                score=item["score"],
+                threshold=item["threshold"],
+                is_active=item["is_active"]
+            )
+            for item in emotion_results
+        ]
+
+        return EmotionAnalysisResponse(
+            success=True,
+            message="감정 분석이 완료되었습니다.",
+            data=EmotionAnalysisData(
+                session_id=session_id,
+                combined_text=combined_text,
+                emotions=emotions,
+                message_count=user_message_count
+            )
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"감정 분석 실패: {e}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"감정 분석 실패: {str(e)}")

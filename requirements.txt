@@ -6,6 +6,8 @@ python-dotenv==1.0.1
 
 # PDF Processing
 pypdf==3.17.4
+PyMuPDF>=1.23.0  # fitz 모듈
+langchain-text-splitters>=0.2.0
 
 # AI/ML - LangChain 1.0 latest
 langchain==1.0.3
@@ -36,4 +38,9 @@ redis>=5.0.0
 
 # 스케줄링
 apscheduler>=3.10.4
+
+# ML - 감정 분석 모델
+transformers>=4.30.0
+torch>=2.0.0
+numpy>=1.24.0
 

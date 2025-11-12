@@ -73,3 +73,23 @@ class ChatHistoryResponse(BaseModel):
     """채팅 내역 조회 응답"""
     success: bool = Field(..., description="성공 여부")
     data: ChatHistoryData = Field(..., description="채팅 내역 데이터")
+
+class EmotionItem(BaseModel):
+    """감정 항목"""
+    emotion: str = Field(..., description="감정 이름 (KOTE 43 레이블)")
+    score: float = Field(..., ge=0.0, le=1.0, description="감정 점수 (0.0 ~ 1.0)")
+    threshold: float = Field(..., ge=0.0, le=1.0, description="감정 활성화 임계값")
+    is_active: bool = Field(..., description="임계값을 넘었는지 여부")
+
+class EmotionAnalysisData(BaseModel):
+    """감정 분석 데이터"""
+    session_id: str = Field(..., description="세션 ID")
+    combined_text: str = Field(..., description="합쳐진 대화 텍스트")
+    emotions: List[EmotionItem] = Field(..., description="상위 5개 감정 리스트 (점수 내림차순)")
+    message_count: int = Field(..., description="분석에 사용된 사용자 메시지 개수")
+
+class EmotionAnalysisResponse(BaseModel):
+    """감정 분석 응답"""
+    success: bool = Field(..., description="성공 여부")
+    message: str = Field(..., description="응답 메시지")
+    data: EmotionAnalysisData = Field(..., description="감정 분석 데이터")
