@@ -13,7 +13,7 @@ from app.config import get_settings
 from app.prompts.system import COUNSELOR_SYSTEM_PROMPT
 import tiktoken
 
-# ConversationSummaryBufferMemory 설정
+# 대화 요약 버퍼 설정 (ConversationSummaryBufferMemory 로직 수동 구현)
 MAX_TOKEN_LIMIT = 2000  # 최근 대화가 이 토큰 수를 초과하면 오래된 메시지 요약
 SUMMARY_REDIS_KEY = "conversation_summary"  # Redis에 저장할 요약 키
 
@@ -119,9 +119,9 @@ class ChatOrchestrator:
         """
         사용자 메시지 처리 (전체 플로우)
 
-        **Redis + ConversationSummaryBufferMemory 통합:**
+        **Redis + 대화 요약 버퍼 통합:**
         - Redis: 전체 대화 영속화 스토리지
-        - ConversationSummaryBufferMemory 로직: 오래된 메시지 자동 요약, 최근 메시지 원본 유지
+        - 대화 요약 버퍼: 오래된 메시지 자동 요약, 최근 메시지 원본 유지
 
         Args:
             session_id: 세션 ID
@@ -141,7 +141,7 @@ class ChatOrchestrator:
         # 3. Redis에서 기존 대화 내역 전체 로드
         full_conversation = self.session_manager.get_full_conversation(session_id)
 
-        # 4. ConversationSummaryBufferMemory 로직 적용 (수동 구현)
+        # 4. 대화 요약 버퍼 로직 적용
         buffered_messages = self._apply_summary_buffer_memory(session_id, full_conversation)
 
         # 5. 과거 일기 검색 (RAG)
@@ -184,7 +184,7 @@ class ChatOrchestrator:
         full_conversation: List[Dict]
     ) -> List:
         """
-        ConversationSummaryBufferMemory 로직 적용
+        대화 요약 버퍼 로직 적용
 
         **동작 원리:**
         1. 최근 메시지들의 토큰 수 계산
@@ -303,11 +303,11 @@ class ChatOrchestrator:
         manual_context: Optional[str] = None
     ) -> List:
         """
-        컨텍스트 구성 (시스템 프롬프트 + PDF 매뉴얼 + 과거 일기 + ConversationSummaryBufferMemory + 현재 메시지)
+        컨텍스트 구성 (시스템 프롬프트 + PDF 매뉴얼 + 과거 일기 + 대화 요약 버퍼 + 현재 메시지)
 
         Args:
             similar_diaries: RAG로 검색된 유사 일기
-            buffered_messages: ConversationSummaryBufferMemory에서 가져온 메시지 (요약 + 최근 원본)
+            buffered_messages: 대화 요약 버퍼에서 가져온 메시지 (요약 + 최근 원본)
             current_message: 현재 사용자 메시지
             manual_context: PDF 매뉴얼 컨텍스트
         """
@@ -333,7 +333,7 @@ class ChatOrchestrator:
 
         messages.append(SystemMessage(content=system_content))
 
-        # 4. ConversationSummaryBufferMemory에서 가져온 버퍼된 대화 내역 추가
+        # 4. 대화 요약 버퍼에서 가져온 버퍼된 대화 내역 추가
         # (자동으로 요약된 과거 대화 + 최근 원본 메시지)
         messages.extend(buffered_messages)
 
