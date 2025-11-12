@@ -1,5 +1,6 @@
 # app/services/auth_service.py
 from datetime import datetime, timedelta, timezone
+import re
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
@@ -11,6 +12,7 @@ import uuid
 SECRET_KEY = "your-secret-key-change-in-production"  # 환경변수로 관리
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30 * 24 * 60  # 30일
+EMAIL_REGEX = r"^[\w\.-]+@[\w\.-]+\.\w+$"
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -50,6 +52,9 @@ class AuthService:
     def register(self, email: str, password: str, nickname: str) -> dict:
         """회원가입"""
         # 이메일 중복 체크
+        if not re.match(EMAIL_REGEX, email):
+            raise ValueError("이메일 형식이 올바르지 않습니다")
+
         if self.user_repository.exists_by_email(email):
             raise ValueError("이미 존재하는 이메일입니다")
 
@@ -72,6 +77,9 @@ class AuthService:
     
     def login(self, email: str, password: str) -> str:
         """로그인"""
+        if not re.match(EMAIL_REGEX, email):
+            raise ValueError("이메일 형식이 올바르지 않습니다")
+        
         # 사용자 조회
         user = self.user_repository.find_by_email(email)
 
