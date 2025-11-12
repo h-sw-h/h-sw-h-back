@@ -31,7 +31,7 @@ class ChatSessionManager:
 
     def create_session(self, user_id: str) -> str:
         """
-        새 세션 생성
+        새 세션 생성 (멱등성: 기존 세션이 있으면 그대로 반환)
 
         Returns:
             session_id: 생성된 세션 ID
@@ -39,6 +39,12 @@ class ChatSessionManager:
         session_id = user_id
         session_key = f"session:{session_id}"
 
+        # 기존 세션이 있으면 last_activity만 업데이트하고 반환
+        if self.redis.exists(session_key):
+            self.redis.hset(session_key, "last_activity", datetime.now().isoformat())
+            return session_id
+
+        # 새 세션 생성
         session_data = {
             "user_id": user_id,
             "created_at": datetime.now().isoformat(),
@@ -48,10 +54,6 @@ class ChatSessionManager:
 
         # 세션 메타데이터 저장 (Hash)
         self.redis.hset(session_key, mapping=session_data)
-
-        # 메시지 리스트 초기화 (List)
-        messages_key = f"messages:{session_id}"
-        # self.redis.delete(messages_key)  # 혹시 모를 기존 데이터 삭제
 
         return session_id
 
